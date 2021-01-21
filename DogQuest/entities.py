@@ -12,85 +12,78 @@ pg.display.set_caption("DogQuest")
 
 obstacles = []
 
-class Dog:
+class Dog(pg.sprite.Sprite):
     def __init__(self, x, y, vy):
-        self.x = x
-        self.y = y
+        pg.sprite.Sprite.__init__(self)
         self.vy = vy
 
+        self.dying = False
+
         self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
-        self.rect = self.image.get_rect()
+        self.rect = self.image.get_rect(x=x, y=y)
     
 
     def update(self):
-        self.y += self.vy
+        self.rect.y += self.vy
 
     def control(self):
         key_pressed = pg.key.get_pressed()
         if key_pressed[K_w]:
             self.vy = -10
-            if self.y <= 0:
+            if self.rect.y <= 0:
                 self.vy = 0
         elif key_pressed[K_s]:
             self.vy = 10
-            if self.y + 74 >= GAME_DIMENSIONS[1]:
+            if self.rect.y + 74 >= GAME_DIMENSIONS[1]:
                 self.vy = 0
         else:
             self.vy = 0
         
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))
+    '''def draw(self, screen):
+        screen.blit(self.image, (self.rect.x, self.rect.y))'''
+    
+    '''def collision(self, obs):
+        if self.rect.colliderect(obs.rect):
+            return True'''
 
-class Rock:
-    def __init__(self, x, y, vx, width, height):
-        self.x = x
-        self.y = y
+class Rock(pg.sprite.Sprite):
+    def __init__(self, x, y, vx):
+        pg.sprite.Sprite.__init__(self)
         self.vx = vx
-        self.width = width
-        self.height = height
-        self.hitbox = (x, y, width, height)
 
         self.image = pg.image.load("Resources/Images/rock.png").convert_alpha()
-        self.rect = self.image.get_rect()
+        self.rect = self.image.get_rect(x=x, y=y)
 
     def movement(self):
-        if self.x >= GAME_DIMENSIONS[0]:
+        if self.rect.x >= GAME_DIMENSIONS[0]:
             self.vx = 0 
         else:
-            self.x -= self.vx   
+            self.rect.x -= self.vx   
 
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))
+    '''def draw(self, screen):
+        screen.blit(self.image, (self.rect.x, self.rect.y))'''
 
-class Hole:
-    def __init__(self, x, y, vx, width, height):
-        self.x = x
-        self.y = y
+class Hole(pg.sprite.Sprite):
+    def __init__(self, x, y, vx):
+        pg.sprite.Sprite.__init__(self)
         self.vx = vx
-        self.width = width
-        self.height = height
-        self.hitbox = (x, y, width, height)
 
         self.image = pg.image.load("Resources/Images/hole.png").convert_alpha()
-        self.rect = self.image.get_rect()
+        self.rect = self.image.get_rect(x=x, y=y)
 
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))        
+    '''def draw(self, screen):
+        screen.blit(self.image, (self.rect.x, self.rect.y))'''        
 
-class Cat:
-    def __init__(self, x, y, vx, width, height):
-        self.x = x
-        self.y = y
+class Cat(pg.sprite.Sprite):
+    def __init__(self, x, y, vx):
+        pg.sprite.Sprite.__init__(self)
         self.vx = vx
-        self.width = width
-        self.height = height
-        self.hitbox = (x, y, width, height)
 
         self.image = pg.image.load("Resources/Images/cat.png").convert_alpha()
-        self.rect = self.image.get_rect()
+        self.rect = self.image.get_rect(x=x, y=y)
 
-    def draw(self, screen):
-        screen.blit(self.image, (self.x, self.y))
+    '''def draw(self, screen):
+        screen.blit(self.image, (self.rect.x, self.rect.y))'''
 
 
 class Background:
@@ -103,8 +96,15 @@ class Background:
 class Game:
     def __init__(self):
         self.dog = Dog(50, 250, 0)
+        self.rock = Rock(750, random.randint(0, 550), 0)
+        self.hole = Hole(750, random.randint(0, 550), 0)
+        self.cat = Cat(750, random.randint(0, 550), 0)
 
         self.background = Background()
+
+        self.player = pg.sprite.Group(self.dog)
+        self.problems = pg.sprite.Group(self.rock, self.hole, self.cat)
+        self.all = pg.sprite.Group(self.player, self.problems)
 
         self.clock = pg.time.Clock()
 
@@ -128,24 +128,26 @@ class Game:
 
 
             screen.blit(self.background.image, (0, 0))
-            self.dog.draw(screen)
+            self.player.draw(screen)
 
-            for obstacle in obstacles:
-                obstacle.draw(screen)
-                obstacle.x -= 1.4
-                if obstacle.x < obstacle.width * -1:
-                    obstacles.pop(obstacles.index(obstacle))
+            '''self.dog.collision(Rock)
+            if self.dog.dying == True:
+                game_over = True'''
+            
+            '''for obstacle in self.problems:
+                self.problems.draw(screen)
+                self.problems.rect.x -= 1.4
+                if self.problems.rect.x < 0:
+                    self.problems.pop(obstacles.index(obstacle))'''
 
-            pg.time.set_timer(USEREVENT+2, random.randrange(2000, 3500))
-            if event.type == USEREVENT+2:
+            pg.time.set_timer(USEREVENT, random.randrange(2000, 3500))
+            if event.type == USEREVENT:
                 r = random.randrange(0,100)
                 if r == 0:
-                    obstacles.append(Rock(750, random.randint(1, 550), 1, 50, 50))
+                    self.problems.draw(screen)
                 elif r == 1:
-                    obstacles.append(Hole(750, random.randint(1, 550), 1, 50, 50))
+                    self.problems.draw(screen)
                 elif r == 2:
-                    obstacles.append(Cat(750, random.randint(1, 550), 1, 50, 50))
-                    
-            
+                    self.problems.draw(screen)
 
             pg.display.flip()
