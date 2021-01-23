@@ -1,29 +1,38 @@
 import pygame as pg
 from pygame.locals import *
 from DogQuest import GAME_DIMENSIONS, FPS
-
 import random
 import sys
+
+pg.font.init()
+main_font = pg.font.SysFont("arial", 25)
 
 pg.init()
 
 screen = pg.display.set_mode(GAME_DIMENSIONS)
 pg.display.set_caption("DogQuest")
 
+OBSROCK = pg.image.load("Resources/Images/rock.png").convert_alpha()
+OBSHOLE = pg.image.load("Resources/Images/hole.png").convert_alpha()
+OBSCAT = pg.image.load("Resources/Images/cat.png").convert_alpha()
+obstacles_img = [OBSROCK, OBSHOLE, OBSCAT]
 obstacles = []
+obs_vel = -1.4
 
-class Dog(pg.sprite.Sprite):
+
+class Dog:
     def __init__(self, x, y, vy):
-        pg.sprite.Sprite.__init__(self)
+        self.x = x
+        self.y = y
         self.vy = vy
 
-        self.dying = False
+        self.kill = False
 
         self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
         self.rect = self.image.get_rect(x=x, y=y)
     
-
     def update(self):
+        self.y += self.vy
         self.rect.y += self.vy
 
     def control(self):
@@ -38,83 +47,57 @@ class Dog(pg.sprite.Sprite):
                 self.vy = 0
         else:
             self.vy = 0
-        
-    '''def draw(self, screen):
-        screen.blit(self.image, (self.rect.x, self.rect.y))'''
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x, self.y))
+
+
+class Obstacle:
+    def __init__(self, x, y, vx):
+        self.x = x
+        self.y = y
+        self.vx = vx
+
+        self.image = random.choice(obstacles_img)
+        self.rect = self.image.get_rect(x=self.x, y=self.y)
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x, self.y))
+
+    def move(self, vx):
+        self.x += vx
+        self.rect.x += vx
     
-    '''def collision(self, obs):
-        if self.rect.colliderect(obs.rect):
-            return True'''
+    def collision(self, smt):
+        return self.rect.colliderect(smt.rect)
 
-class Rock(pg.sprite.Sprite):
-    def __init__(self, x, y, vx):
-        pg.sprite.Sprite.__init__(self)
-        self.vx = vx
-
-        self.image = pg.image.load("Resources/Images/rock.png").convert_alpha()
-        self.rect = self.image.get_rect(x=x, y=y)
-
-    def movement(self):
-        if self.rect.x >= GAME_DIMENSIONS[0]:
-            self.vx = 0 
-        else:
-            self.rect.x -= self.vx   
-
-    '''def draw(self, screen):
-        screen.blit(self.image, (self.rect.x, self.rect.y))'''
-
-class Hole(pg.sprite.Sprite):
-    def __init__(self, x, y, vx):
-        pg.sprite.Sprite.__init__(self)
-        self.vx = vx
-
-        self.image = pg.image.load("Resources/Images/hole.png").convert_alpha()
-        self.rect = self.image.get_rect(x=x, y=y)
-
-    '''def draw(self, screen):
-        screen.blit(self.image, (self.rect.x, self.rect.y))'''        
-
-class Cat(pg.sprite.Sprite):
-    def __init__(self, x, y, vx):
-        pg.sprite.Sprite.__init__(self)
-        self.vx = vx
-
-        self.image = pg.image.load("Resources/Images/cat.png").convert_alpha()
-        self.rect = self.image.get_rect(x=x, y=y)
-
-    '''def draw(self, screen):
-        screen.blit(self.image, (self.rect.x, self.rect.y))'''
 
 
 class Background:
     def __init__(self):
-
         self.image =pg.image.load("Resources/Images/grassbackground.png").convert_alpha()
-
-
 
 class Game:
     def __init__(self):
         self.dog = Dog(50, 250, 0)
-        self.rock = Rock(750, random.randint(0, 550), 0)
-        self.hole = Hole(750, random.randint(0, 550), 0)
-        self.cat = Cat(750, random.randint(0, 550), 0)
 
         self.background = Background()
 
-        self.player = pg.sprite.Group(self.dog)
-        self.problems = pg.sprite.Group(self.rock, self.hole, self.cat)
-        self.all = pg.sprite.Group(self.player, self.problems)
+        self.level = 1
+        self.lives = 3
 
         self.clock = pg.time.Clock()
 
+    def main_menu(self):
+        title_font = pg.font.SysFont("comicsans", 30)
+        start = True
 
-
-    def main_loop(self):
-        game_over = False
-
-        while not game_over:
+        while start:
             self.clock.tick(FPS)
+
+            screen.blit(self.background.image, (0, 0))
+            title_label = title_font.render("Presiona espacio para empezar", 1, (255, 255, 255))
+            screen.blit(title_label, (GAME_DIMENSIONS[0]/2, title_label.get_width()/2))
 
             events = pg.event.get()
             for event in events:
@@ -122,32 +105,67 @@ class Game:
                 if event.type == pg.QUIT or key_pressed[K_ESCAPE]:
                     pg.quit()
                     sys.exit()
+                if event.type == pg.MOUSEBUTTONDOWN:
+                    self.main_loop()
+        
+                pg.display.flip()
+
+
+    def redraw_main(self):
+        screen.blit(self.background.image, (0, 0))
+        lives_label = main_font.render(f"Vidas: {self.lives}", 1, (255, 255, 255))
+        level_label = main_font.render(f"Nivel: {self.level}", 1, (255, 255, 255))
+
+        screen.blit(lives_label, (GAME_DIMENSIONS[0] - 100, GAME_DIMENSIONS[1] - 50))
+        screen.blit(level_label, (GAME_DIMENSIONS[0] - 100, GAME_DIMENSIONS[1] - 75))
+
+        for obstacle in obstacles:
+            obstacle.draw(screen)
+
+        self.dog.draw(screen)
+
+        pg.display.update()
+
+    def main_loop(self):
+        game_over = False
+
+        while not game_over:
+            self.clock.tick(FPS)
+
+            wave_len = 15
+            if len(obstacles) == 0:
+                for i in range(wave_len):
+                    obstacle = Obstacle(random.randrange(GAME_DIMENSIONS[0]+ 75, GAME_DIMENSIONS[0] + 850), random.randrange (0, GAME_DIMENSIONS[1] - 75), obs_vel)
+                    obstacles.append(obstacle)
+
+            for obstacle in obstacles:
+                obstacle.move(obs_vel)
+                if obstacle.x < 0:
+                    obstacles.remove(obstacle)
+                if obstacle.collision(self.dog):
+                    self.lives -=1
+                    print("Colisión Detectada")
+
+            events = pg.event.get()
+            for event in events:
+                key_pressed = pg.key.get_pressed()
+                if event.type == pg.QUIT or key_pressed[K_ESCAPE]:
+                    game_over = True
+                    pg.quit()
+                    sys.exit()
             
             self.dog.control()
             self.dog.update()
 
+            self.redraw_main()
 
-            screen.blit(self.background.image, (0, 0))
-            self.player.draw(screen)
+            print(self.dog.rect)
 
-            '''self.dog.collision(Rock)
-            if self.dog.dying == True:
-                game_over = True'''
-            
-            '''for obstacle in self.problems:
-                self.problems.draw(screen)
-                self.problems.rect.x -= 1.4
-                if self.problems.rect.x < 0:
-                    self.problems.pop(obstacles.index(obstacle))'''
+            pg.display.flip() 
 
-            pg.time.set_timer(USEREVENT, random.randrange(2000, 3500))
-            if event.type == USEREVENT:
-                r = random.randrange(0,100)
-                if r == 0:
-                    self.problems.draw(screen)
-                elif r == 1:
-                    self.problems.draw(screen)
-                elif r == 2:
-                    self.problems.draw(screen)
-
-            pg.display.flip()
+#Tareas 
+# Megaclase Obstacle - DONE
+# Colisiones - Por qué no funcionan bien?
+# Animación muerte perrete
+# Sonido muerte perrete
+# Empezar a crear pantalla principal - Empezada, poco a poco
