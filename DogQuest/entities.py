@@ -32,6 +32,7 @@ class DogStatus(enum.Enum):
 
 class Dog(pg.sprite.Sprite):
     num_imgs_kill = 9
+    anim_ret = 5
 
     def __init__(self, x, y, vy):
         pg.sprite.Sprite.__init__(self)
@@ -40,17 +41,33 @@ class Dog(pg.sprite.Sprite):
         self.y = y
         self.vy = vy
 
-        self.kill = False
+        self.image_kill = self.kill_animation_load()
+        self.ix_kill = 0
+        self.refresh = 0
+        self.ticks_plus = 0
+        self.ticks_animation_frame = 1000//FPS * self.anim_ret
+
+        self.status = DogStatus.Alive
 
         self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
+
         self.rect = self.image.get_rect(x=x, y=y)
         self.rect.x = self.x
+
+    def reset(self):
+        self.ix_kill = 0
+        self.ticks_plus = 0
+        self.status = DogStatus.Alive
+        self.rect.x = self.x
+        self.rect.y = self.y
     
     def update(self):
+        if self.status == DogStatus.Dying:
+            return
+
         self.y += self.vy
         self.rect.y += self.vy
         
-
     def control(self):
         key_pressed = pg.key.get_pressed()
         if key_pressed[K_w]:
@@ -68,12 +85,33 @@ class Dog(pg.sprite.Sprite):
         screen.blit(self.image, (self.x, self.y))
 
     def kill_animation_load(self):
-        return [pg.image.load(f"Resources/Images/killdog0{i}.png") for i in range(self.num_imgs_kill)]
+        return [pg.image.load(f"Resources/Images/dogkill0{i}.png") for i in range(self.num_imgs_kill)]
+
+    def kill(self, dt):
+        if self.ix_kill >= len(self.num_imgs_kill):
+            self.status = DogStatus.Killed
+        
+        self.image = self.image_kill[self.ix_kill]
+
+        self.ticks_plus += dt
+        if self.ticks_plus >= self.ticks_animation_frame:
+            self.ix_kill += 1
+            self.ticks_plus = 0
+        
+        return False
+    
+    def update_image(self):
+        self.update()
+
+        if self.status == DogStatus.Dying:
+            return self.kill(dt)
+        
 
 
 class Obstacle(pg.sprite.Sprite):
     def __init__(self, x, y, vx):
         pg.sprite.Sprite.__init__(self)
+
 
         self.x = x
         self.y = y
@@ -192,6 +230,9 @@ class Game:
                         self.lives -= 1
                         obstacle.vx = 0
                         obstacles.remove(obstacle)
+            
+                if self.lives == 0:
+                    self.dog.status == DogStatus.Dying
 
 
             events = pg.event.get()
@@ -203,7 +244,9 @@ class Game:
                     sys.exit()
             
             self.dog.control()
-            self.dog.update()
+            self.dog.update_image()
+
+            print(self.dog.status)
 
             self.redraw_main()
 
