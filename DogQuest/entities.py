@@ -3,14 +3,19 @@ from pygame.locals import *
 from DogQuest import GAME_DIMENSIONS, FPS
 import random
 import sys
+import enum
 
 pg.font.init()
-main_font = pg.font.SysFont("arial", 25)
+main_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 20)
 
 pg.init()
 
 screen = pg.display.set_mode(GAME_DIMENSIONS)
 pg.display.set_caption("DogQuest")
+
+GAMEBG = pg.image.load("Resources/Images/grassbackground.png").convert_alpha()
+MENUBG = pg.image.load("Resources/Images/mainmenubackground.png").convert_alpha()
+bg_img = [MENUBG, GAMEBG]
 
 OBSROCK = pg.image.load("Resources/Images/rock.png").convert_alpha()
 OBSHOLE = pg.image.load("Resources/Images/hole.png").convert_alpha()
@@ -19,9 +24,18 @@ obstacles_img = [OBSROCK, OBSHOLE, OBSCAT]
 obstacles = []
 obs_vel = -1.4
 
+class DogStatus(enum.Enum):
+    Alive = 0
+    Dying = 1
+    Killed = 2
 
-class Dog:
+
+class Dog(pg.sprite.Sprite):
+    num_imgs_kill = 9
+
     def __init__(self, x, y, vy):
+        pg.sprite.Sprite.__init__(self)
+
         self.x = x
         self.y = y
         self.vy = vy
@@ -30,10 +44,12 @@ class Dog:
 
         self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
         self.rect = self.image.get_rect(x=x, y=y)
+        self.rect.x = self.x
     
     def update(self):
         self.y += self.vy
         self.rect.y += self.vy
+        
 
     def control(self):
         key_pressed = pg.key.get_pressed()
@@ -51,9 +67,14 @@ class Dog:
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
 
+    def kill_animation_load(self):
+        return [pg.image.load(f"Resources/Images/killdog0{i}.png") for i in range(self.num_imgs_kill)]
 
-class Obstacle:
+
+class Obstacle(pg.sprite.Sprite):
     def __init__(self, x, y, vx):
+        pg.sprite.Sprite.__init__(self)
+
         self.x = x
         self.y = y
         self.vx = vx
@@ -65,39 +86,52 @@ class Obstacle:
         screen.blit(self.image, (self.x, self.y))
 
     def move(self, vx):
+        self.rect.x = self.x
         self.x += vx
-        self.rect.x += vx
-    
-    def collision(self, smt):
-        return self.rect.colliderect(smt.rect)
 
 
+class Pethouse(pg.sprite.Sprite):
+    def __init__(self, x, y, vx):
+        pg.sprite.Sprite.__init__(self)
 
-class Background:
-    def __init__(self):
-        self.image =pg.image.load("Resources/Images/grassbackground.png").convert_alpha()
+        self.x = x
+        self.y = y
+        self.vx = vx
+
+        self.image = pg.image.load("Resources/Images/pethouse.png").convert_alpha()
+        self.rect = self.image.get_rect(x=self.x, y=self.y)
+
+    def move(self, vx):
+        while self.x >= 600:
+            self.x += vx
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x, self.y))
+
 
 class Game:
     def __init__(self):
         self.dog = Dog(50, 250, 0)
-
-        self.background = Background()
+        self.pethouse = Pethouse(800, 200, -1)
 
         self.level = 1
         self.lives = 3
+        self.score = 0
+
+        self.obs_passed = 0
 
         self.clock = pg.time.Clock()
 
     def main_menu(self):
-        title_font = pg.font.SysFont("comicsans", 30)
+        title_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
         start = True
 
         while start:
             self.clock.tick(FPS)
 
-            screen.blit(self.background.image, (0, 0))
-            title_label = title_font.render("Presiona espacio para empezar", 1, (255, 255, 255))
-            screen.blit(title_label, (GAME_DIMENSIONS[0]/2, title_label.get_width()/2))
+            screen.blit(bg_img[0], (0, 0))
+            title_label = title_font.render("Click to show respect", 1, (0, 0, 0))
+            screen.blit(title_label, (125, 380))
 
             events = pg.event.get()
             for event in events:
@@ -112,15 +146,23 @@ class Game:
 
 
     def redraw_main(self):
-        screen.blit(self.background.image, (0, 0))
+        screen.blit(bg_img[1], (0, 0))
         lives_label = main_font.render(f"Vidas: {self.lives}", 1, (255, 255, 255))
         level_label = main_font.render(f"Nivel: {self.level}", 1, (255, 255, 255))
+        score_label = main_font.render(f"Score: {self.score}", 1, (255, 255, 255))
 
-        screen.blit(lives_label, (GAME_DIMENSIONS[0] - 100, GAME_DIMENSIONS[1] - 50))
-        screen.blit(level_label, (GAME_DIMENSIONS[0] - 100, GAME_DIMENSIONS[1] - 75))
+        if self.obs_passed < 10:    
+            for obstacle in obstacles:
+                obstacle.draw(screen)
+        
+        if self.obs_passed > 5:
+            self.pethouse.draw(screen)
+            self.pethouse.move(-5)
 
-        for obstacle in obstacles:
-            obstacle.draw(screen)
+        pg.draw.rect(screen, (0, 0, 0), (675, 480, 125, 125))
+        screen.blit(lives_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 50))
+        screen.blit(level_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 75))
+        screen.blit(score_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 100))
 
         self.dog.draw(screen)
 
@@ -132,19 +174,25 @@ class Game:
         while not game_over:
             self.clock.tick(FPS)
 
-            wave_len = 15
+            wave_len = 13
             if len(obstacles) == 0:
                 for i in range(wave_len):
                     obstacle = Obstacle(random.randrange(GAME_DIMENSIONS[0]+ 75, GAME_DIMENSIONS[0] + 850), random.randrange (0, GAME_DIMENSIONS[1] - 75), obs_vel)
                     obstacles.append(obstacle)
 
+            
             for obstacle in obstacles:
                 obstacle.move(obs_vel)
-                if obstacle.x < 0:
-                    obstacles.remove(obstacle)
-                if obstacle.collision(self.dog):
-                    self.lives -=1
-                    print("Colisión Detectada")
+                if self.obs_passed < 10:
+                    if obstacle.x < 0:
+                        obstacles.remove(obstacle)
+                        self.obs_passed += 1
+                        self.score += 10
+                    if obstacle.rect.colliderect(self.dog.rect):
+                        self.lives -= 1
+                        obstacle.vx = 0
+                        obstacles.remove(obstacle)
+
 
             events = pg.event.get()
             for event in events:
@@ -159,13 +207,15 @@ class Game:
 
             self.redraw_main()
 
-            print(self.dog.rect)
 
             pg.display.flip() 
 
 #Tareas 
 # Megaclase Obstacle - DONE
-# Colisiones - Por qué no funcionan bien?
-# Animación muerte perrete
+# Colisiones - Por qué no funcionan bien? - FUCKING DONE!
+# Animación muerte perrete - Animación Final Nivel
 # Sonido muerte perrete
-# Empezar a crear pantalla principal - Empezada, poco a poco
+# Implemetar niveles
+# Caseta final nivel - SORTA
+# Empezar a crear pantalla principal - Empezada, poco a poco - Sorta
+
