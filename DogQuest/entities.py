@@ -88,7 +88,7 @@ class Dog(pg.sprite.Sprite):
         return [pg.image.load(f"Resources/Images/dogkill0{i}.png") for i in range(self.num_imgs_kill)]
 
     def kill(self, dt):
-        if self.ix_kill >= len(self.num_imgs_kill):
+        if self.ix_kill >= len(self.image_kill):
             self.status = DogStatus.Killed
         
         self.image = self.image_kill[self.ix_kill]
@@ -100,7 +100,7 @@ class Dog(pg.sprite.Sprite):
         
         return False
     
-    def update_image(self):
+    def update_image(self, dt):
         self.update()
 
         if self.status == DogStatus.Dying:
@@ -210,7 +210,7 @@ class Game:
         game_over = False
 
         while not game_over:
-            self.clock.tick(FPS)
+            dt = self.clock.tick(FPS)
 
             wave_len = 13
             if len(obstacles) == 0:
@@ -231,8 +231,8 @@ class Game:
                         obstacle.vx = 0
                         obstacles.remove(obstacle)
             
-                if self.lives == 0:
-                    self.dog.status == DogStatus.Dying
+            if self.lives == 0:
+                self.dog.status = DogStatus.Dying
 
 
             events = pg.event.get()
@@ -244,7 +244,7 @@ class Game:
                     sys.exit()
             
             self.dog.control()
-            self.dog.update_image()
+            self.dog.update_image(dt)
 
             print(self.dog.status)
 
