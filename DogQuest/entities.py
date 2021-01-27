@@ -18,11 +18,13 @@ MENUBG = pg.image.load("Resources/Images/mainmenubackground.png").convert_alpha(
 bg_img = [MENUBG, GAMEBG]
 
 OBSROCK = pg.image.load("Resources/Images/rock.png").convert_alpha()
+OBSROCKBIG = pg.image.load("Resources/Images/rockbig.png").convert_alpha()
 OBSHOLE = pg.image.load("Resources/Images/hole.png").convert_alpha()
 OBSCAT = pg.image.load("Resources/Images/cat.png").convert_alpha()
-obstacles_img = [OBSROCK, OBSHOLE, OBSCAT]
+obstacles_img = [OBSROCK, OBSROCKBIG, OBSHOLE, OBSCAT]
 obstacles = []
 obs_vel = -1.4
+
 
 class DogStatus(enum.Enum):
     Alive = 0
@@ -50,6 +52,8 @@ class Dog(pg.sprite.Sprite):
         self.status = DogStatus.Alive
 
         self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
+        self.image_reversed = pg.image.load("Resources/Images/reversedog.png").convert_alpha()
+
 
         self.rect = self.image.get_rect(x=x, y=y)
         self.rect.x = self.x
@@ -80,12 +84,13 @@ class Dog(pg.sprite.Sprite):
                 self.vy = 0
         else:
             self.vy = 0
+                
 
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
 
     def kill_animation_load(self):
-        return [pg.image.load(f"Resources/Images/dogkill0{i}.png") for i in range(self.num_imgs_kill)]
+        return [pg.image.load(f"Resources/Images/dogkill0{i}.png") for i in range(self.num_imgs_kill -1)]
 
     def kill(self, dt):
         if self.ix_kill >= len(self.image_kill):
@@ -105,6 +110,17 @@ class Dog(pg.sprite.Sprite):
 
         if self.status == DogStatus.Dying:
             return self.kill(dt)
+
+    def animation_finish(self):
+        if self.x < 700:
+            self.x += 1.5
+            self.y = self.y
+            if self.y != 325:
+                if self.y <= 324:
+                    self.y += 1
+                if self.y >= 326:
+                    self.y += -1
+        return True
         
 
 
@@ -192,6 +208,12 @@ class Game:
         if self.obs_passed < 10:    
             for obstacle in obstacles:
                 obstacle.draw(screen)
+
+        if self.dog.x < 701:
+            self.dog.draw(screen)
+
+        if self.dog.x == 701:
+            screen.blit(self.dog.image_reversed, (545, 325))
         
         if self.obs_passed > 5:
             self.pethouse.draw(screen)
@@ -202,7 +224,7 @@ class Game:
         screen.blit(level_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 75))
         screen.blit(score_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 100))
 
-        self.dog.draw(screen)
+        
 
         pg.display.update()
 
@@ -233,6 +255,9 @@ class Game:
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
+
+            if self.obs_passed == 10:
+                self.dog.animation_finish()
 
 
             events = pg.event.get()
