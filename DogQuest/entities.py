@@ -26,7 +26,6 @@ obstacles = []
 obs_vel = -1.4
 
 
-
 class DogStatus(enum.Enum):
     Alive = 0
     Dying = 1
@@ -57,8 +56,6 @@ class Dog(pg.sprite.Sprite):
 
         self.rect = self.image.get_rect(x=x, y=y)
         self.rect.x = self.x
-
-        self.screenfillblack = pg.Surface.fill(screen, BLACK)
 
 
     def reset(self):
@@ -109,8 +106,6 @@ class Dog(pg.sprite.Sprite):
             self.ix_kill += 1
             self.ticks_plus = 0
 
-        pg.time.set_timer(self.screenfillblack, 10000)
-
         return False
     
     def update_image(self, dt):
@@ -133,7 +128,6 @@ class Dog(pg.sprite.Sprite):
             angle += 1
             self.image = pg.transform.rotate(self.image, angle)
             '''
-        pg.time.set_timer(self.screenfillblack, 10000)
         return True
 
 class Obstacle(pg.sprite.Sprite):
@@ -173,20 +167,44 @@ class Pethouse(pg.sprite.Sprite):
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
 
+class StageStatus(enum.Enum):
+    Running = 0
+    Playingone = 1
+    Playingtwo = 2
+    Interlevels = 3
+    GameOver = 4
 
 class Game:
     def __init__(self):
-        self.running = True
-        self.playing = False
-
         self.dog = Dog(50, 250, 0)
         self.pethouse = Pethouse(800, 200, -1)
 
         self.level = 1
         self.lives = 3
         self.score = 0
-        
-        self.game_over = False
+
+        self.stage = StageStatus.Running
+    
+        self.obs_passed = 0
+
+        self.clock = pg.time.Clock()
+
+    def reset(self):
+        self.dog.x = 50
+        self.dog.y = 250
+        self.dog.rect.x = self.dog.x
+        self.dog.rect.y = self.dog.y
+
+        self.dog.image = self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
+
+        self.pethouse.x = 800
+        self.pethouse.y = 200
+
+        self.level = 1
+        self.lives = 3
+        self.score = 0
+
+        self.stage = StageStatus.Running
 
         self.obs_passed = 0
 
@@ -195,9 +213,8 @@ class Game:
 
     def main_menu(self):
         title_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
-        self.game_over = False
 
-        while self.running:
+        while self.stage == StageStatus.Running:
             self.clock.tick(FPS)
 
             screen.blit(bg_img[0], (0, 0))
@@ -214,12 +231,11 @@ class Game:
             events = pg.event.get()
             for event in events:
                 if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
-                    self.running = False
-                    self.playing = False
                     pg.quit()
                     sys.exit()
                 elif event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
-                    self.playing = True
+                    self.reset()
+                    self.stage = StageStatus.Playingone
                     self.levelone()
                 elif event.type == pg.KEYDOWN and event.key == pg.K_i:
                     self.instructions()
@@ -228,18 +244,59 @@ class Game:
 
     def instructions(self):
         pass
+
+    def interlevels(self):
+        interlevel_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 55)
+        score_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
+        misc_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 15)
+
+        self.clock.tick(FPS)
+
+        while self.stage == StageStatus.Interlevels:
+            pg.Surface.fill(screen, (BLACK))
+
+            interlevel_label = interlevel_font.render("YOU DID IT", 1, (WHITE))
+            interlevel_label_rect = interlevel_label.get_rect(center = (400, 300))
+
+            score_label = score_font.render("Score: {}".format(self.score), 1, (WHITE))
+            score_label_rect = score_label.get_rect(center = (400, 500))
+
+            retry_label = misc_font.render("Press (R) to retry", 1, (WHITE))
+            retry_label_rect = retry_label.get_rect(center = (100, 100))
+
+            continue_label = misc_font.render("Press return to continue", 1, (WHITE))
+            continue_label_rect = continue_label.get_rect(center = (700, 100))
+
+            screen.blit(interlevel_label, interlevel_label_rect)
+            screen.blit(score_label, score_label_rect)
+            screen.blit(retry_label, retry_label_rect)
+            screen.blit(continue_label, continue_label_rect)
+
+            events = pg.event.get()
+            for event in events:
+                if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
+                    pg.quit()
+                    sys.exit()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_r:
+                    self.stage = StageStatus.Running
+                    self.main_menu()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                    self.reset()
+                    self.stage = StageStatus.Playingtwo
+                    self.leveltwo()
+        
+            pg.display.flip()
+
         
     def gameover(self):
         gameover_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 55)
         score_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
         misc_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 15)
 
-        game_over_screen = True
+    
+        self.clock.tick(FPS)
 
-        while game_over_screen:
-            self.playing = False
-            self.clock.tick(FPS)
-
+        while self.stage == StageStatus.GameOver:
             pg.Surface.fill(screen, (BLACK))
 
             gameover_label = gameover_font.render("GAME OVER", 1, (WHITE))
@@ -265,35 +322,41 @@ class Game:
                     pg.quit()
                     sys.exit()
                 elif event.type == pg.KEYDOWN and event.key == pg.K_r:
-                    self.game_over_screen = False
-                    self.playing = True
+                    self.stage = StageStatus.Running
                     self.main_menu()
-                else:
-                    self.game_over_screen = False
-                    self.playing = True
         
             pg.display.flip()
 
 
     def redraw_main(self):
         screen.blit(bg_img[1], (0, 0))
-        lives_label = main_font.render(f"Vidas: {self.lives}", 1, (255, 255, 255))
-        level_label = main_font.render(f"Nivel: {self.level}", 1, (255, 255, 255))
-        score_label = main_font.render(f"Score: {self.score}", 1, (255, 255, 255))
+        lives_label = main_font.render(f"Lives: {self.lives}", 1, (WHITE))
+        level_label = main_font.render(f"Nivel: {self.level}", 1, (WHITE))
+        score_label = main_font.render(f"Score: {self.score}", 1, (WHITE))
 
-        if self.obs_passed < 10:    
-            for obstacle in obstacles:
-                obstacle.draw(screen)
+        if self.stage == StageStatus.Playingone:
+            if self.obs_passed < 10:    
+                for obstacle in obstacles:
+                    obstacle.draw(screen)
+        if self.stage == StageStatus.Playingtwo:
+            if self.obs_passed < 20:    
+                for obstacle in obstacles:
+                    obstacle.draw(screen)
 
-        if self.dog.x < 701:
+        if self.dog.x < GAME_DIMENSIONS[0] - 99:
             self.dog.draw(screen)
 
-        if self.dog.x == 701:
+        if self.dog.x == GAME_DIMENSIONS[0] - 99:
             screen.blit(self.dog.image_reversed, (545, 325))
         
-        if self.obs_passed > 5:
-            self.pethouse.draw(screen)
-            self.pethouse.move(-5)
+        if self.stage == StageStatus.Playingone:
+            if self.obs_passed > 5:
+                self.pethouse.draw(screen)
+                self.pethouse.move(-5)
+        if self.stage == StageStatus.Playingtwo:
+            if self.obs_passed > 10:
+                self.pethouse.draw(screen)
+                self.pethouse.move(-5)
 
         pg.draw.rect(screen, (0, 0, 0), (675, 480, 125, 125))
         screen.blit(lives_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 50))
@@ -303,9 +366,8 @@ class Game:
         pg.display.update()
 
     def levelone(self):
-        self.playing = True
 
-        while self.playing:
+        while self.stage == StageStatus.Playingone:
             dt = self.clock.tick(FPS)
 
             wave_len = 13
@@ -329,11 +391,13 @@ class Game:
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
-                pg.time.set_timer(self.gameover(), 5000)
-                self.playing = False
 
             if self.obs_passed == 10:
-                self.dog.animation_finish()                
+                self.dog.animation_finish()  
+
+            if self.dog.x == GAME_DIMENSIONS[0] - 99:
+                self.stage = StageStatus.Interlevels
+                self.interlevels()
 
 
             events = pg.event.get()
@@ -350,6 +414,56 @@ class Game:
 
             self.redraw_main()
 
+            pg.display.flip() 
+
+    def leveltwo(self):
+        self.level = 2
+        self.score = 100
+
+        while self.stage == StageStatus.Playingtwo:
+            dt = self.clock.tick(FPS)
+
+            wave_len = 23
+            if len(obstacles) == 0:
+                for i in range(wave_len):
+                    obstacle = Obstacle(random.randrange(GAME_DIMENSIONS[0]+ 75, GAME_DIMENSIONS[0] + 850), random.randrange (0, GAME_DIMENSIONS[1] - 75), obs_vel)
+                    obstacles.append(obstacle)
+
+            
+            for obstacle in obstacles:
+                obstacle.move(obs_vel - 0.5)
+                if self.obs_passed < 20:
+                    if obstacle.x < 0:
+                        obstacles.remove(obstacle)
+                        self.obs_passed += 1
+                        self.score += 10
+                    if obstacle.rect.colliderect(self.dog.rect):
+                        self.lives -= 1
+                        obstacle.vx = 0
+                        obstacles.remove(obstacle)
+            
+            if self.lives == 0:
+                self.dog.status = DogStatus.Dying
+
+            if self.obs_passed == 20:
+                self.dog.animation_finish()  
+
+            if self.dog.x == GAME_DIMENSIONS[0] - 99:
+                self.stage = StageStatus.GameOver
+                self.gameover()
+
+
+            events = pg.event.get()
+            for event in events:
+                key_pressed = pg.key.get_pressed()
+                if event.type == pg.QUIT or key_pressed[K_ESCAPE]:
+                    pg.quit()
+                    sys.exit()
+            
+            self.dog.control()
+            self.dog.update_image(dt)
+
+            self.redraw_main()
 
             pg.display.flip() 
 
