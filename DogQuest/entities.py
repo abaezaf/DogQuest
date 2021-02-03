@@ -9,6 +9,7 @@ pg.font.init()
 main_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 20)
 
 pg.init()
+pg.mixer.init()
 
 screen = pg.display.set_mode(GAME_DIMENSIONS)
 pg.display.set_caption("DogQuest")
@@ -24,6 +25,12 @@ OBSCAT = pg.image.load("Resources/Images/cat.png").convert_alpha()
 obstacles_img = [OBSROCK, OBSROCKBIG, OBSHOLE, OBSCAT]
 obstacles = []
 obs_vel = -1.4
+
+kill_sound = pg.mixer.Sound("Resources/Sounds/dogwhine.wav")
+bark_sound = pg.mixer.Sound("Resources/Sounds/bark.wav")
+
+current_time = 0
+kill_time = 0
 
 
 class DogStatus(enum.Enum):
@@ -57,6 +64,9 @@ class Dog(pg.sprite.Sprite):
         self.rect = self.image.get_rect(x=x, y=y)
         self.rect.x = self.x
 
+        self.angle = 0
+        self.rotated_dog = self.image
+        self.rotated_rect = self.rect
 
     def reset(self):
         self.ix_kill = 0
@@ -86,6 +96,9 @@ class Dog(pg.sprite.Sprite):
                 self.vy = 0
         else:
             self.vy = 0
+
+        if key_pressed[K_BACKSPACE]:
+            pg.mixer.Sound.play(bark_sound)
                 
 
     def draw(self, screen):
@@ -115,7 +128,6 @@ class Dog(pg.sprite.Sprite):
             return self.kill(dt)
 
     def animation_finish(self):
-        angle = 0
         if self.x < 700:
             self.x += 1.5
             self.y = self.y
@@ -124,11 +136,14 @@ class Dog(pg.sprite.Sprite):
                     self.y += 1
                 if self.y >= 326:
                     self.y += -1
-            '''
-            angle += 1
-            self.image = pg.transform.rotate(self.image, angle)
-            '''
+
         return True
+
+    def rotate(self, angle):
+        self.rotated_dog = pg.transform.rotozoom(self.image, angle, 1)
+        self.rotated_rect = self.rotated_dog.get_rect(center = self.rect.center)
+        return self.rotated_dog, self.rotated_rect
+
 
 class Obstacle(pg.sprite.Sprite):
     def __init__(self, x, y, vx):
@@ -173,6 +188,8 @@ class StageStatus(enum.Enum):
     Playingtwo = 2
     Interlevels = 3
     GameOver = 4
+    EndGame = 5
+    Instructions = 6
 
 class Game:
     def __init__(self):
@@ -197,12 +214,14 @@ class Game:
 
         self.dog.image = self.image = pg.image.load("Resources/Images/dog.png").convert_alpha()
 
+        self.dog.status = DogStatus.Alive
+
         self.pethouse.x = 800
         self.pethouse.y = 200
 
         self.level = 1
         self.lives = 3
-        self.score = 0
+        self.score == 0
 
         self.stage = StageStatus.Running
 
@@ -238,12 +257,48 @@ class Game:
                     self.stage = StageStatus.Playingone
                     self.levelone()
                 elif event.type == pg.KEYDOWN and event.key == pg.K_i:
+                    self.stage = StageStatus.Instructions
                     self.instructions()
         
-                pg.display.flip()
+            pg.display.flip()
 
     def instructions(self):
-        pass
+        instructionsmain_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 40)
+        instructions_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 20)
+
+        while self.stage == StageStatus.Instructions:
+            self.clock.tick(FPS)
+
+            screen.blit(bg_img[0], (0, 0))
+
+            maintitle_label = instructionsmain_font.render("BE A GOOD BOY", 1, (BLACK))
+            maintitle_label_rect = maintitle_label.get_rect(center = (250, 325))
+
+            maintext_label = instructions_font.render("Press W and S to avoid obstacles and", 1, (BLACK))
+            maintext_label_rect = maintext_label.get_rect(center = (250, 400))
+
+            maintext_label2 = instructions_font.render("arrive as soon as possible to your pethouse!", 1, (BLACK))
+            maintext_label2_rect = maintext_label2.get_rect(center = (250, 450))
+
+            maintext_label3 = instructions_font.render("Press return to go back", 1, (BLACK))
+            maintext_label3_rect = maintext_label3.get_rect(center = (250, 550))
+
+            screen.blit(maintitle_label, maintitle_label_rect)
+            screen.blit(maintext_label, maintext_label_rect)
+            screen.blit(maintext_label2, maintext_label2_rect)
+            screen.blit(maintext_label3, maintext_label3_rect)
+
+            events = pg.event.get()
+            for event in events:
+                if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
+                    pg.quit()
+                    sys.exit()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                    self.stage = StageStatus.Running
+                    self.main_menu()
+
+            pg.display.flip()
+
 
     def interlevels(self):
         interlevel_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 55)
@@ -324,6 +379,46 @@ class Game:
                 elif event.type == pg.KEYDOWN and event.key == pg.K_r:
                     self.stage = StageStatus.Running
                     self.main_menu()
+                    self.reset()
+        
+            pg.display.flip()
+
+    def endgame(self):
+        endgame_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 65)
+        score_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
+        misc_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 15)
+
+    
+        self.clock.tick(FPS)
+
+        while self.stage == StageStatus.EndGame:
+            pg.Surface.fill(screen, (BLACK))
+
+            endgame_label = endgame_font.render("CONGRATULATIONS", 1, (WHITE))
+            endgame_label_rect = endgame_label.get_rect(center = (400, 300))
+
+            score_label = score_font.render("Your final score: {}".format(self.score), 1, (WHITE))
+            score_label_rect = score_label.get_rect(center = (400, 500))
+
+            retry_label = misc_font.render("Press (R) to try again", 1, (WHITE))
+            retry_label_rect = retry_label.get_rect(center = (100, 100))
+
+            submit_label = misc_font.render("Press (S) to submit score", 1, (WHITE))
+            submit_label_rect = submit_label.get_rect(center = (700, 100))
+
+            screen.blit(endgame_label, endgame_label_rect)
+            screen.blit(score_label, score_label_rect)
+            screen.blit(retry_label, retry_label_rect)
+            screen.blit(submit_label, submit_label_rect)
+
+            events = pg.event.get()
+            for event in events:
+                if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
+                    pg.quit()
+                    sys.exit()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_r:
+                    self.stage = StageStatus.Running
+                    self.main_menu()
         
             pg.display.flip()
 
@@ -346,8 +441,10 @@ class Game:
         if self.dog.x < GAME_DIMENSIONS[0] - 99:
             self.dog.draw(screen)
 
-        if self.dog.x == GAME_DIMENSIONS[0] - 99:
-            screen.blit(self.dog.image_reversed, (545, 325))
+        if self.dog.x == 400:
+            self.dog.angle += 1
+            self.dog.rotate(self.dog.angle)
+            screen.blit(self.dog.rotated_dog, self.dog.rotated_rect)
         
         if self.stage == StageStatus.Playingone:
             if self.obs_passed > 5:
@@ -357,6 +454,7 @@ class Game:
             if self.obs_passed > 10:
                 self.pethouse.draw(screen)
                 self.pethouse.move(-5)
+
 
         pg.draw.rect(screen, (0, 0, 0), (675, 480, 125, 125))
         screen.blit(lives_label, (GAME_DIMENSIONS[0] - 105, GAME_DIMENSIONS[1] - 50))
@@ -369,6 +467,7 @@ class Game:
 
         while self.stage == StageStatus.Playingone:
             dt = self.clock.tick(FPS)
+            kill_time = 0
 
             wave_len = 13
             if len(obstacles) == 0:
@@ -388,9 +487,12 @@ class Game:
                         self.lives -= 1
                         obstacle.vx = 0
                         obstacles.remove(obstacle)
+                elif self.obs_passed > 10:
+                    self.score = 100
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
+                #pg.mixer.Sound.play(kill_sound)
 
             if self.obs_passed == 10:
                 self.dog.animation_finish()  
@@ -410,15 +512,23 @@ class Game:
             self.dog.control()
             self.dog.update_image(dt)
 
-            print(self.dog.status)
-
             self.redraw_main()
+
+            current_time = pg.time.get_ticks()
+
+            if self.dog.status == DogStatus.Killed:
+                kill_time = pg.time.get_ticks() + current_time
+
+            if kill_time - current_time > 2000:
+                self.stage = StageStatus.GameOver
+                self.gameover()
 
             pg.display.flip() 
 
     def leveltwo(self):
         self.level = 2
-        self.score = 100
+        self.score == 100
+        kill_time = 0
 
         while self.stage == StageStatus.Playingtwo:
             dt = self.clock.tick(FPS)
@@ -444,13 +554,14 @@ class Game:
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
+                pg.mixer.Sound.play(kill_sound)
 
             if self.obs_passed == 20:
                 self.dog.animation_finish()  
 
             if self.dog.x == GAME_DIMENSIONS[0] - 99:
-                self.stage = StageStatus.GameOver
-                self.gameover()
+                self.stage = StageStatus.EndGame
+                self.endgame()
 
 
             events = pg.event.get()
@@ -465,16 +576,28 @@ class Game:
 
             self.redraw_main()
 
+            current_time = pg.time.get_ticks()
+
+            if self.dog.status == DogStatus.Killed:
+                kill_time = pg.time.get_ticks() + current_time
+
+            if kill_time - current_time > 2000:
+                self.stage = StageStatus.GameOver
+                self.gameover()
+
             pg.display.flip() 
 
-#Tareas 
-# Megaclase Obstacle - DONE
-# Colisiones - Por qué no funcionan bien? - FUCKING DONE!
-# Animación muerte perrete - DONE - Animación Final Nivel - Meterle rotación - rotozoom!?
-# Método reiniciar para muerte perro
-# Sonido muerte perrete
-# Implementar niveles
-# Reset juego al estar en game over
-# Caseta final nivel - Compramos?
-# Empezar a crear pantalla principal - Empezada, poco a poco - Compramos?
+'''
+Tareas
+
+Quedan 4 cosas:
+
+- Pelearse con rotación en animación finish
+- Pelearse bucle levelone/leveltwo
+- Sqlite y ponerse con los high scores y la base de datos
+- Corregir movida con scores
+
+'''
+
+
 
