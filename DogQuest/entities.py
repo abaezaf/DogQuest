@@ -4,6 +4,7 @@ from DogQuest import GAME_DIMENSIONS, FPS, BLACK, WHITE
 import random
 import sys
 import enum
+import sqlite3
 
 pg.init()
 pg.mixer.init()
@@ -32,6 +33,16 @@ bark_sound = pg.mixer.Sound("Resources/Sounds/bark.wav")
 current_time = 0
 kill_time = 0
 
+con = sqlite3.connect('highscore.db')
+cursorObj = con.cursor()
+db_id = 0
+entities = ()
+
+def sql_insert(con, entities):
+    cursorObj.execute('INSERT INTO highscore(ID, name, score) VALUES(?, ?, ?)', entities)
+    con.commit()
+
+input_box = []
 
 class DogStatus(enum.Enum):
     Alive = 0
@@ -181,6 +192,51 @@ class Pethouse(pg.sprite.Sprite):
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
 
+class TextBox(pg.sprite.Sprite):
+    def __init__(self, x, y, w, h, text=""):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+
+        self.rect = pg.Rect(x, y, w, h)
+
+        self.color_inactive = pg.Color(BLACK)
+        self.color_active = pg.Color(WHITE)
+        self.color = self.color_inactive
+
+        self.font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 35)
+        self.text = text
+        self.text_label = self.font.render(text, True, self.color)
+
+        self.active = False
+
+    def handle_event(self, event):
+        if event.type == pg.MOUSEBUTTONDOWN:
+            if self.rect.collidepoint(event.pos):
+                self.active = not self.active
+            else:
+                self.active = False
+            self.color = self.color_active if self.active else self.color_inactive
+        if event.type == pg.KEYDOWN and len(self.text) <= 12:
+            if self.active:
+                if event.key == pg.K_RETURN:
+                    print(self.text)
+                    self.active = False
+                elif event.key == pg.K_BACKSPACE:
+                    self.text = self.text[:-1]
+                else:
+                    self.text += event.unicode
+                self.text_label = self.font.render(self.text, True, self.color)
+
+    def update(self):
+        width = max(200, self.text_label.get_width()+10)
+        self.rect.w = width
+
+    def draw(self, screen):
+        screen.blit(self.text_label, (self.rect.x + 5, self.rect.y + 5))
+        pg.draw.rect(screen, (WHITE), self.rect, 2)
+
 class StageStatus(enum.Enum):
     Running = 0
     Playingone = 1
@@ -189,6 +245,8 @@ class StageStatus(enum.Enum):
     GameOver = 4
     EndGame = 5
     Instructions = 6
+    SubmitHighScore = 7
+    HighScore = 8
 
 class Game:
     def __init__(self):
@@ -202,6 +260,10 @@ class Game:
         self.stage = StageStatus.Running
     
         self.obs_passed = 0
+
+        self.input_box = TextBox(300, 325, 600, 50)
+
+        self.text = self.input_box.text
 
         self.clock = pg.time.Clock()
 
@@ -252,6 +314,7 @@ class Game:
             screen.blit(instructions_label, instructions_label_rect)
 
             self.score = 0
+            self.text =""
 
             events = pg.event.get()
             for event in events:
@@ -386,6 +449,9 @@ class Game:
                     self.stage = StageStatus.Running
                     self.reset()
                     self.main_menu()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_s:
+                    self.stage = StageStatus.SubmitHighScore
+                    self.submit_highscore()
         
             pg.display.flip()
 
@@ -425,13 +491,71 @@ class Game:
                 elif event.type == pg.KEYDOWN and event.key == pg.K_r:
                     self.stage = StageStatus.Running
                     self.main_menu()
+                elif event.type == pg.KEYDOWN and event.key == pg.K_s:
+                    self.stage = StageStatus.SubmitHighScore
+                    self.submit_highscore()
                     
             pg.display.flip()
+
+    def submit_highscore(self):
+        submit_hs_font_title =  pg.font.Font("Resources/Fonts/pixelfont.ttf", 35)
+        submit_hs_font_misc = pg.font.Font("Resources/Fonts/pixelfont.ttf", 30)
+        submit_hs_font_misc2 = pg.font.Font("Resources/Fonts/pixelfont.ttf", 25)
+
+        self.clock.tick(FPS)
+
+        while self.stage == StageStatus.SubmitHighScore:
+            pg.Surface.fill(screen, BLACK)
+
+            submit_hs_label = submit_hs_font_misc.render("Click below to ADD YOUR NAME", 1, (WHITE))
+            submit_hs_label_rect = submit_hs_label.get_rect(center = (400, 250))
+
+            misc_label1 = submit_hs_font_title.render("Thank you for playing", 1, (WHITE))
+            misc_label1_rect = misc_label1.get_rect(center = (400, 100))
+            
+            misc_label2 = submit_hs_font_misc2.render("After writing the name, press return to submit", 1, (WHITE))
+            misc_label2_rect = misc_label2.get_rect(center = (400, 500))
+
+            misc_label3 = submit_hs_font_misc2.render("Press ESC to restart the game", 1, (WHITE))
+            misc_label3_rect = misc_label3.get_rect(center = (400, 550))
+
+            input_box = [self.input_box]
+
+            screen.blit(submit_hs_label, submit_hs_label_rect)
+            screen.blit(misc_label1, misc_label1_rect)
+            screen.blit(misc_label2, misc_label2_rect)
+            screen.blit(misc_label3, misc_label3_rect)
+
+            if self.text != "" and self.input_box.active == False:
+                input_box.clear()
+                print(entities)
+                sql_insert(con, db_id, self.text, self.score)
+                db_id += 1
+
+            events = pg.event.get()
+            for event in events:
+                if event.type == pg.QUIT:
+                    pg.quit()
+                    sys.exit()
+                if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
+                    self.reset()
+                    self.stage = StageStatus.Running
+                    self.main_menu()
+                for box in input_box:
+                    box.handle_event(event)
+            for box in input_box:
+                box.update()
+                box.draw(screen)
+
+            pg.display.flip()
+
+    def highscore(self):
+        pass
 
     def redraw_main(self):
         screen.blit(bg_img[1], (0, 0))
         lives_label = main_font.render(f"Lives: {self.lives}", 1, (WHITE))
-        level_label = main_font.render(f"Nivel: {self.level}", 1, (WHITE))
+        level_label = main_font.render(f"Level: {self.level}", 1, (WHITE))
         score_label = main_font.render(f"Score: {self.score}", 1, (WHITE))
 
         if self.stage == StageStatus.Playingone:
@@ -447,7 +571,7 @@ class Game:
             self.dog.draw(screen)
 
         if self.stage == StageStatus.Playingone:
-            if self.dog.x >= 400:
+            if self.dog.x >= 400 and self.dog.x + 10 <= 600:
                 self.dog.angle += 1.5
                 if self.dog.angle < 179:
                     self.dog.rotate(self.dog.angle)
@@ -457,7 +581,7 @@ class Game:
                 self.pethouse.move(-5)
 
         if self.stage == StageStatus.Playingtwo:
-            if self.dog.x >= 400:
+            if self.dog.x >= 400 and self.dog.x + 10 <= 600:
                 self.dog.angle += 1.5
                 if self.dog.angle < 179:
                     self.dog.rotate(self.dog.angle)
