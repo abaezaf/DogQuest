@@ -30,7 +30,7 @@ As indicated in the requirements.txt file:
 pygame==2.0.1
 ```
 
-
+ 
 
 ## Execution
 
