@@ -1,10 +1,12 @@
 import pygame as pg
 from pygame.locals import *
 from DogQuest import GAME_DIMENSIONS, FPS, BLACK, WHITE
+
 import random
 import sys
 import enum
 import sqlite3
+from sqlite3 import Error
 
 pg.init()
 pg.mixer.init()
@@ -33,16 +35,12 @@ bark_sound = pg.mixer.Sound("Resources/Sounds/bark.wav")
 current_time = 0
 kill_time = 0
 
-con = sqlite3.connect('highscore.db')
-cursorObj = con.cursor()
-db_id = 0
-entities = ()
-
-def sql_insert(con, entities):
-    cursorObj.execute('INSERT INTO highscore(ID, name, score) VALUES(?, ?, ?)', entities)
-    con.commit()
-
 input_box = []
+
+DBFILE = 'highscore.db'
+con = sqlite3.connect(DBFILE)
+c = con.cursor()
+
 
 class DogStatus(enum.Enum):
     Alive = 0
@@ -107,9 +105,8 @@ class Dog(pg.sprite.Sprite):
         else:
             self.vy = 0
 
-        if key_pressed[K_BACKSPACE]:
+        if key_pressed[K_SPACE]:
             pg.mixer.Sound.play(bark_sound)
-                
 
     def draw(self, screen):
         screen.blit(self.image, (self.x, self.y))
@@ -120,6 +117,7 @@ class Dog(pg.sprite.Sprite):
     def kill(self, dt):
         if self.ix_kill >= len(self.image_kill):
             self.status = DogStatus.Killed
+            self.ix_kill = 0
             return False
 
         self.image = self.image_kill[self.ix_kill]
@@ -221,7 +219,6 @@ class TextBox(pg.sprite.Sprite):
         if event.type == pg.KEYDOWN and len(self.text) <= 12:
             if self.active:
                 if event.key == pg.K_RETURN:
-                    print(self.text)
                     self.active = False
                 elif event.key == pg.K_BACKSPACE:
                     self.text = self.text[:-1]
@@ -263,8 +260,6 @@ class Game:
 
         self.input_box = TextBox(300, 325, 600, 50)
 
-        self.text = self.input_box.text
-
         self.clock = pg.time.Clock()
 
     def reset(self):
@@ -294,6 +289,8 @@ class Game:
 
         self.obs_passed = 0
 
+        self.input_box.text = ""
+
         self.clock = pg.time.Clock()
 
     def main_menu(self):
@@ -310,8 +307,12 @@ class Game:
             instructions_label = title_font.render("(I)nstructions", 1, (BLACK))
             instructions_label_rect = instructions_label.get_rect(center = (200, 450))
 
+            highscore_label = title_font.render("(H)igh Scores", 1, (BLACK))
+            highscore_label_rect = highscore_label.get_rect(center = (200, 500))
+
             screen.blit(start_label, start_label_rect)
             screen.blit(instructions_label, instructions_label_rect)
+            screen.blit(highscore_label, highscore_label_rect)
 
             self.score = 0
             self.text =""
@@ -328,8 +329,9 @@ class Game:
                 elif event.type == pg.KEYDOWN and event.key == pg.K_i:
                     self.stage = StageStatus.Instructions
                     self.instructions()
-
-            print(f"ct: {current_time} kt:: {kill_time}")
+                elif event.type == pg.KEYDOWN and event.key == pg.K_h:
+                    self.stage = StageStatus.HighScore
+                    self.highscore()
         
             pg.display.flip()
 
@@ -516,7 +518,7 @@ class Game:
             misc_label2 = submit_hs_font_misc2.render("After writing the name, press return to submit", 1, (WHITE))
             misc_label2_rect = misc_label2.get_rect(center = (400, 500))
 
-            misc_label3 = submit_hs_font_misc2.render("Press ESC to restart the game", 1, (WHITE))
+            misc_label3 = submit_hs_font_misc2.render("Press Space to see the high scores", 1, (WHITE))
             misc_label3_rect = misc_label3.get_rect(center = (400, 550))
 
             input_box = [self.input_box]
@@ -528,19 +530,18 @@ class Game:
 
             if self.text != "" and self.input_box.active == False:
                 input_box.clear()
-                print(entities)
-                sql_insert(con, db_id, self.text, self.score)
-                db_id += 1
 
             events = pg.event.get()
             for event in events:
                 if event.type == pg.QUIT:
                     pg.quit()
                     sys.exit()
-                if event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE:
-                    self.reset()
-                    self.stage = StageStatus.Running
-                    self.main_menu()
+                if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
+                    self.db_connection(DBFILE)
+                    self.db_creation()
+                    self.db_data_entry()
+                    self.stage = StageStatus.HighScore
+                    self.highscore()
                 for box in input_box:
                     box.handle_event(event)
             for box in input_box:
@@ -550,6 +551,50 @@ class Game:
             pg.display.flip()
 
     def highscore(self):
+        hs_font = pg.font.Font("Resources/Fonts/pixelfont.ttf", 55)
+        hs_font_data = pg.font.Font("Resources/Fonts/pixelfont.ttf", 35)
+        hs_font_misc = pg.font.Font("Resources/Fonts/pixelfont.ttf", 25)
+
+        self.clock.tick(FPS)
+
+        entries = self.db_show_data()
+
+        while self.stage == StageStatus.HighScore:
+            pg.Surface.fill(screen, BLACK)
+
+            hs_label = hs_font.render("HIGH SCORES", 1, (WHITE))
+            hs_label_rect = hs_label.get_rect(center = (400, 100))
+
+            hs_retry_label = hs_font_misc.render("Press return to restart the game", 1, (WHITE))
+            hs_retry_label_rect = hs_retry_label.get_rect(center = (400, 550))
+            
+            data_entry_01_label = hs_font_data.render(str(entries[0]), 1, (WHITE))
+            data_entry_01_label_rect = data_entry_01_label.get_rect(center = (400, 200))
+
+            data_entry_02_label = hs_font_data.render(str(entries[1]), 1, (WHITE))
+            data_entry_02_label_rect = data_entry_02_label.get_rect(center = (400, 250))
+
+            data_entry_03_label = hs_font_data.render(str(entries[2]), 1, (WHITE))
+            data_entry_03_label_rect = data_entry_03_label.get_rect(center = (400, 300))
+            
+            screen.blit(hs_label, hs_label_rect)
+            screen.blit(hs_retry_label, hs_retry_label_rect)
+            
+            screen.blit(data_entry_01_label, data_entry_01_label_rect)
+            screen.blit(data_entry_02_label, data_entry_02_label_rect)
+            screen.blit(data_entry_03_label, data_entry_03_label_rect)
+            
+            events = pg.event.get()
+            for event in events:
+                if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
+                    pg.quit()
+                    sys.exit()
+                if event.type == pg.KEYDOWN and event.key == pg.K_RETURN:
+                    self.stage = StageStatus.Running
+                    self.reset()
+                    self.main_menu()
+            
+            pg.display.flip()
         pass
 
     def redraw_main(self):
@@ -627,7 +672,7 @@ class Game:
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
-                #pg.mixer.Sound.play(kill_sound)
+                pg.mixer.Sound.play(kill_sound)
                 obstacles.clear()
 
             if self.obs_passed == 10:
@@ -658,8 +703,6 @@ class Game:
             if kill_time - current_time > 2000:
                 self.stage = StageStatus.GameOver
                 self.gameover()
-
-            print(self.obs_passed)
 
             pg.display.flip() 
 
@@ -693,7 +736,7 @@ class Game:
             
             if self.lives == 0:
                 self.dog.status = DogStatus.Dying
-                #pg.mixer.Sound.play(kill_sound)
+                pg.mixer.Sound.play(kill_sound)
                 obstacles.clear()
 
             if self.obs_passed == 20:
@@ -725,18 +768,44 @@ class Game:
                 self.stage = StageStatus.GameOver
                 self.gameover()
 
-            print(self.obs_passed)
-
             pg.display.flip() 
 
-'''
-Tareas
+    def db_connection(self, db_file):
+        con = None
+        try:
+            con = sqlite3.connect(db_file)
+            return con
+        except Error as error:
+            print("Could not connect database: " + str(error))
+        print("por aquí tira")
 
-Quedan 2 cosas:
+    def db_creation(self):
+        try:
+            c.execute('CREATE TABLE IF NOT EXISTS highscore (name TEXT, score INTEGER)')
+            con.commit()
+        except Error as error:
+            print("Could not create table " + str(error))
 
-- Problema Reset - No funciona el timer al resetear - Se pierde animación muerte
-- Sqlite y ponerse con los high scores y la base de datos
+    def db_data_entry(self):
+        try:
+            c.execute("INSERT INTO highscore (name, score) VALUES (?, ?)", (self.input_box.text, self.score))
+            con.commit()
+        except Error as error:
+            print("Could not add data to database: " + str(error))
 
-'''
+    def db_show_data(self):
+        c.execute('SELECT * FROM highscore ORDER BY score DESC')
+        entries = []
+        for x in range(3):
+            entries.append(c.fetchone())
+        con.commit
+        c.close
+
+        return entries
+    
+    def db_close(self):
+        c.close()
+        con.close()
+
 
 
